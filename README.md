@@ -15,5 +15,5 @@ kubectl port-forward pod/[pod name] [port]
 helm repo add jenkins https://charts.jenkins.io
 helm repo update
 helm repo list
-helm upgrade --install jenkins jenkins/jenki
+helm upgrade --install jenkins jenkins/jenkins
 ```
