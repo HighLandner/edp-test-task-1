@@ -18,7 +18,7 @@ node {
             ], poll: false
         }
         stage("hadolint-check") {
-            hadolint Dockerfile
+            // hadolint Dockerfile
         }
     }
 }
