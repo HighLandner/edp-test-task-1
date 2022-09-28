@@ -1,4 +1,4 @@
-properties (
+properties(
         [
                 parameters([
                         string(name: 'GIT_URL', defaultValue: 'git@github.com:HighLandner/edp-test-task-1.git', description: 'Git repo url'),
@@ -9,47 +9,82 @@ properties (
                         string(name: 'ENV', defaultValue: 'dev', description: 'Build environment')
                 ]),
 
-                [$class: 'BuildDiscarderProperty',
+                [$class  : 'BuildDiscarderProperty',
                  strategy: [
-                         $class: 'LogRotator',
+                         $class               : 'LogRotator',
                          artifactDaysToKeepStr: '',
-                         artifactNumToKeepStr: '',
-                         daysToKeepStr: '',
-                         numToKeepStr: '10'
+                         artifactNumToKeepStr : '',
+                         daysToKeepStr        : '',
+                         numToKeepStr         : '10'
                  ]
                 ]
         ]
 )
 
-node("jenkins-jenkins-agent") {
-    try {
-        stage("checkout") {
-            git branch: params.GIT_BRANCH,
-                    credentialsId: params.GIT_CREDENTIALS,
-                    url: params.GIT_URL
-        }
+podTemplate(yaml: '''
+kind: Pod
+spec:
+  containers:
+  - name: git
+    image: bitnami/git:latest
+    command:
+    - cat
+    tty: true
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:debug
+    imagePullPolicy: Always
+    command:
+    - sleep
+    args:
+    - 9999999
+    volumeMounts:
+      - name: jenkins-docker-cfg
+        mountPath: /kaniko/.docker
+  volumes:
+  - name: jenkins-docker-cfg
+    projected:
+      sources:
+      - secret:
+          name: kaniko-secret
+          items:
+            - key: .dockerconfigjson
+              path: config.json
+''') {
 
-        stage("version-tag") {
-            def IMAGE_TAG = sh(script:"""cat version.txt""", returnStdout: true) + "." + BUILD_NUMBER
-            if (params.ENV == 'prod') {
-                currentBuild.displayName = 'RC-' + IMAGE_TAG
-            } else {
-                currentBuild.displayName = 'SNAPSHOT-' + IMAGE_TAG
+    node(POD_LABEL) {
+        try {
+            container("git") {
+                stage("checkout") {
+                    git branch: params.GIT_BRANCH,
+                            credentialsId: params.GIT_CREDENTIALS,
+                            url: params.GIT_URL
+                }
             }
-        }
 
-        stage("docker-build") {
-            def dockerImage = docker.build '${REGISTRY}/custom-jenkins:${IMAGE_TAG}'
-        }
-        stage("docker-push") {
-            docker.withRegistry( '', credentials(params.REGISTRY_CREDENTIALS) ) {
-                dockerImage.push()
+            stage("version-tag") {
+                container("git") {
+                    IMAGE_TAG = sh(script: """cat version.txt""", returnStdout: true).trim() + "." + BUILD_NUMBER
+                    if (params.ENV == 'prod') {
+                        currentBuild.displayName = 'RC-' + IMAGE_TAG
+                    } else {
+                        currentBuild.displayName = 'SNAPSHOT-' + IMAGE_TAG
+                    }
+                }
             }
+
+            stage("docker-build-push") {
+                container(name: "kaniko", shell:"/busybox/sh") {
+                    DOCKER_USER = params.REGISTRY
+                    sh '''#!/busybox/sh
+                          /kaniko/executor --context `pwd` --destination '''+DOCKER_USER+'''/nginx-custom:'''+IMAGE_TAG+'''
+                    '''
+                }
+            }
+        } catch (e) {
+            echo 'Build failed ...'
+            throw e
+        } finally {
+            deleteDir()
         }
-    } catch (e) {
-        echo 'Build failed ...'
-        throw e
-    } finally {
-        deleteDir()
     }
 }
