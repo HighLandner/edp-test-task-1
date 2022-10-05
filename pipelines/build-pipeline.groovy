@@ -5,7 +5,6 @@ properties(
                         string(name: 'GIT_BRANCH', defaultValue: 'task-3', description: 'Review'),
                         string(name: 'GIT_CREDENTIALS', defaultValue: 'edp-private-key', description: 'Git repo credentials'),
                         string(name: 'REGISTRY', defaultValue: 'dockerddddd12tfgqv', description: 'Custom docker registry'),
-                        string(name: 'REGISTRY_CREDENTIALS', defaultValue: '', description: 'Docker registry token'),
                         string(name: 'ENV', defaultValue: 'dev', description: 'Build environment')
                 ]),
 
@@ -73,11 +72,12 @@ spec:
             }
 
             stage("docker-build-push") {
-                container(name: "kaniko", shell:"/busybox/sh") {
+                container(name: "kaniko", shell: "/busybox/sh") {
                     DOCKER_USER = params.REGISTRY
                     sh '''#!/busybox/sh
-                          /kaniko/executor --context `pwd` --destination '''+DOCKER_USER+'''/nginx-custom:'''+IMAGE_TAG+'''
-                    '''
+                              cat Dockerfile
+                              /kaniko/executor --context `pwd` --destination ''' + DOCKER_USER + '''/nginx-custom:''' + IMAGE_TAG + '''
+                          '''
                 }
             }
         } catch (e) {
